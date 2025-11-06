@@ -1,0 +1,83 @@
+# ================= REINVENT4 staged learning: pIC50 (Chemprop) + logP =================
+run_type        = "staged_learning"
+device          = "cuda:0"                 # use "cpu" if CUDA is still flaky
+tb_logdir       = "tb_RL_scd1"
+json_out_config = "_staged_learning_scd1.json"
+
+[parameters]
+summary_csv_prefix = "staged_learning"
+use_checkpoint     = false
+purge_memories     = false
+
+# RNN prior/agent
+prior_file = "/home/cm1202/Desktop/NIH_Project/data/prior_scd1.model"
+agent_file = "/home/cm1202/Desktop/NIH_Project/data/models/agent_sdc1.model"
+
+# Network / sampling
+batch_size       = 128
+unique_sequences = true
+randomize_smiles = true
+tb_isim          = false
+
+[learning_strategy]
+type  = "dap"
+sigma = 120         # exploration; we’ll reduce in stage 2 via a new config if desired
+rate  = 0.0001
+
+# Global diversity filter (keep keys supported by your build)
+[diversity_filter]
+type        = "IdenticalMurckoScaffold"
+bucket_size = 25
+minscore    = 0.4
+
+# ------------------------------- Stage 1: broad ---------------------------------
+[[stage]]
+chkpt_file  = "/home/cm1202/Desktop/NIH_Project/data/rl_sdc1/stage1.chkpt"
+termination = "simple"
+max_steps   = 500
+
+[stage.scoring]
+type = "geometric_mean"
+
+#[[stage.scoring.component]]
+#[stage.scoring.component.chemprop]
+  #[[stage.scoring.component.chemprop.endpoint]]
+ # params.checkpoint_dir      = "/home/cm1202/Desktop/NIH_Project/data/models/chemprop_scd1"
+ # params.target_column       = "pIC50"
+ # params.features            = "none"
+ # params.rdkit_2d_normalized = false
+ # transform.type      = "double_sigmoid"
+ # transform.low       = 7.5
+ # transform.high      = 9.0
+ # transform.coef_si   = 10.0
+ # transform.coef_se   = 10.0
+
+# P2: QED window
+[[stage.scoring.component]]
+[stage.scoring.component.Qed]
+  [[stage.scoring.component.Qed.endpoint]]
+  transform.type = "double_sigmoid"
+  transform.low  = 0.60
+  transform.high = 0.90
+  transform.coef_si = 15.0
+  transform.coef_se = 15.0
+
+# P3: MW 200–500
+[[stage.scoring.component]]
+[stage.scoring.component.MolecularWeight]
+  [[stage.scoring.component.MolecularWeight.endpoint]]
+  transform.type     = "double_sigmoid"
+  transform.low      = 200.0
+  transform.high     = 500.0
+  transform.coef_div = 500.0
+  transform.coef_si  = 20.0
+  transform.coef_se  = 20.0
+
+# P4: SlogP 0–5
+[[stage.scoring.component]]
+[stage.scoring.component.SlogP]
+  [[stage.scoring.component.SlogP.endpoint]]
+  transform.type = "reverse_sigmoid"
+  transform.low  = 0.0
+  transform.high = 5.0
+  transform.k    = 0.5
